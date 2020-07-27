@@ -3,4 +3,11 @@
 <h1>home</h1>
 <p> <%= homeText -%> </p>
 
+<% contentText.forEach(function(element){  %>
+    <div class="item">
+      <h1><%= element.title %></h1>
+      <p><%= element.content.substr(0,100)+"..." %><a href="/posts/<%= element.title %>">Read more</a></p>
+    </div>
+    <% }); %>
+
 <%- include("partials/footer") -%>
