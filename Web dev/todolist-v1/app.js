@@ -2,11 +2,10 @@
 
 const express = require("express");
 const bodyParser = require("body-parser");
-const date = require(__dirname +"/date.js");
-console.log(date);
+// const date = require(__dirname +"/date.js");
+const mongoose = require("mongoose");
+const _ = require("lodash");
 
-const items = [];
-const workItems = []
 const app = express();
 
 app.set('view engine', 'ejs');
@@ -15,65 +14,119 @@ app.use(bodyParser.urlencoded({
 }));
 app.use(express.static("Public"));
 
+main().catch(err => console.log(err));
+async function main() {
+  await mongoose.connect('mongodb://127.0.0.1:27017/todolistDB');
+}
+
+const itemsSchema = {
+  name: String
+}
+
+const Item = mongoose.model("Item", itemsSchema)
+
+const task1 = new Item({name: "Water plants"});
+const task2 = new Item({name: "Make Lunch"});
+const task3 = new Item({name: "Defrost turkey"});
+
+const defaultItems = [task1, task2, task3]
+
+
 app.get("/", function(req, res) {
-  let day = date.getDate();
-  res.render('list', {
-    listTitle: day,
-    newListItems: items
-  });
+  Item.find({}, function(err, foundItems){
+    if(foundItems.length == 0){
+      Item.insertMany(defaultItems, function(err){
+        if(err)
+          console.log(err);
+        else
+          console.log("Success")
+      });
+      res.redirect("/")
+    }
+    else
+      res.render('list', {listTitle: "Today", newListItems: foundItems});
+  })
 });
 
-app.get("/work", function(req, res) {
-  res.render('list', {
-    listTitle: "Work List",
-    newListItems: workItems
-  });
-});
+const listSchema = {
+  name: String,
+  items: [itemsSchema]
+};
+const List = mongoose.model("List", listSchema);
 
-app.get("/about", function(req, res){
-  res.render("about");
+app.get("/:customListName", function(req, res){
+  const customListName = _.capitalize(req.params.customListName);
+  const list = new List({
+    name: customListName,
+    items: defaultItems
+  });
+
+  List.findOne({name: customListName}, function(err, results){
+    if(err)
+      console.log(err)
+    else if(!results){
+      // Create the new list
+      list.save();
+      res.redirect("/"+customListName)
+    }
+    else{
+      // Show the existing list
+      res.render('list', {listTitle: customListName, newListItems: results.items})
+    }
+  })
 });
 
 app.post('/', function(req, res) {
-  let item = req.body.newItem;
-  if (req.body.list === "Work") {
-    workItems.push(item);
-    res.redirect('/work');
-  } else {
-    items.push();
-    res.redirect('/');
+  let itemName = req.body.newItem;
+  let listName = req.body.list;
+
+  let newItem = new Item({name: itemName});
+  if(listName === "Today"){
+    newItem.save(function(err){
+      if(err)
+      console.log(err);
+      else
+      res.redirect("/")
+    });
   }
+  else{
+    List.findOne({name: listName}, function(err, foundList){
+      foundList.items.push(newItem);
+      foundList.save();
+      res.redirect("/"+listName)
+    });
+  }
+
 });
+
+app.post("/delete", function(req, res){
+  let itemId = req.body.checkbox;
+  let listName = req.body.listName;
+
+  if(listName ==="Today"){
+    Item.findByIdAndRemove(itemId, function(err){
+      if(err)
+      console.log(err)
+      else{
+        res.redirect("/");
+      }
+    });
+  }
+  else{
+    List.findOneAndUpdate(
+      {name: listName},
+      {$pull:{items: {_id: itemId}}},
+      function(err,foundList){
+        if(!err){
+          res.redirect("/"+listName)
+        }
+      }
+    );
+  }
+
+})
 
 
 app.listen(3000, function() {
   console.log("Server started on port 3000.");
 });
-
-
-// var curDay = today.getDay();
-// var day = "";
-
-// switch (curDay) {
-//   case 0:
-//     day = "Sunday";
-//     break;
-//   case 1:
-//     day = "Monday";
-//     break;
-//   case 2:
-//      day = "Tuesday";
-//     break;
-//   case 3:
-//     day = "Wednesday";
-//     break;
-//   case 4:
-//     day = "Thursday";
-//     break;
-//   case 5:
-//     day = "Friday";
-//     break;
-//   case 6:
-//     day = "Saturday";
-//     default:
-//       console.log("Error: Curent da");
